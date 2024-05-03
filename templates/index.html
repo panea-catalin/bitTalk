@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat Interface</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="banner">Welcome to "ask blockchain" powered by:_  <a href="http://www.edoar.ai"> edoar.ai</a></div> <!-- Banner -->
+
+    <!-- Tabbed Interface -->
+    <div class="tab">
+        <button class="tablinks" onclick="openTab(event, 'Chat')">Chat</button>
+        <button class="tablinks" onclick="openTab(event, 'MongoDB')">MongoDB</button>
+    </div>
+
+    <!-- Tab Content -->
+    <div id="Chat" class="tabcontent">
+        <!-- Chat content with left column for user ID -->
+        <div class="row">
+            <div id="user-id-display">
+                <p>User ID: <span id="currentUserIdDisplay">{{user_id}}</span></p>
+                <div id="sseStatus"></div>
+            </div>
+            <div id="chat-container">
+                <div id="message-display"></div>
+                <div id="message-input-area">
+                    <input type="text" id="messageInput" placeholder="Type your message here..." onkeypress="handleKeyPress(event)">
+                    <button id="sendButton" onclick="sendMessage()">Send</button>
+                </div>
+            </div>
+            <div id="paths-display">
+                <!-- Paths Display Content Here -->
+            </div>
+        </div>
+    </div>
+
+    <div id="MongoDB" class="tabcontent">
+        <!-- MongoDB content here -->
+    </div>
+        
+    <script>
+        let currentUserId = '{{user_id}}'; // Replace with the actual user ID in your template
+        let eventSource = null;
+    
+        document.addEventListener("DOMContentLoaded", () => {
+            initializeEventSource();
+            getUserPaths(currentUserId); // Ensure this function is defined or relevant to your app
+            document.querySelector('.tablinks').click(); // Open the first tab by default
+        });
+    
+        function initializeEventSource() {
+            if (eventSource) {
+                if (eventSource.readyState !== EventSource.CLOSED) {
+                    return; // If already connected or connecting, do nothing
+                }
+                eventSource.close(); // Close any existing connection if it's in a bad state
+            }
+
+            eventSource = new EventSource('/stream/' + currentUserId);
+            eventSource.onopen = () => {
+                console.log("SSE connection opened.");
+                updateConnectionStatus(true);
+            };
+
+            eventSource.onmessage = (event) => {
+                console.log("Received SSE message:", event.data);
+                try {
+                    const msgData = JSON.parse(event.data);
+
+                    if (msgData.type === 'connection_established') {
+                        console.log('SSE connection successfully established.');
+                        updateConnectionStatus(true);
+                        return;
+                    }
+
+                    if (msgData.user_id === currentUserId && msgData.message_id) {
+                        // Check if the message is for a new path and update the UI
+                        if (msgData.type === "new_path") {
+                            displayUserPaths([msgData.path_info], currentUserId, true);
+                        }
+
+                        addMessageToChat(msgData.user_id, msgData.messaged_back, false);
+                        acknowledgeMessage(msgData.message_id);
+                    }
+                } catch (e) {
+                    console.error('Error parsing JSON:', e);
+                }
+            };
+
+            eventSource.onerror = (e) => {
+                if (e.readyState === EventSource.CLOSED) {
+                    console.error('EventSource closed unexpectedly.');
+                } else {
+                    console.error('EventSource encountered an error:', e);
+                }
+                updateConnectionStatus(false);
+                eventSource.close();
+                setTimeout(initializeEventSource, 5000);
+            };
+        }
+
+    
+        function updateConnectionStatus(isConnected) {
+            const statusElement = document.getElementById('sseStatus');
+            if (statusElement) {
+                statusElement.textContent = isConnected ? 'Connected' : 'Disconnected';
+                statusElement.style.color = isConnected ? 'green' : 'red';
+            }
+        }
+    
+        function sendMessage() {
+            const messageInput = document.getElementById("messageInput");
+            const message = messageInput.value;
+            if (message.trim() !== '') {
+                addMessageToChat(currentUserId, message, false); // Add user message to chat immediately
+    
+                fetch('/send_message', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ user_id: currentUserId, messaged_us: message })
+                })
+                .then(response => response.json())
+                .then(() => {
+                    messageInput.value = ''; // Clear input after sending
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                });
+            }
+        }
+    
+        document.getElementById("messageInput").addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                sendMessage();
+            }
+        });
+    
+        function addMessageToChat(userId, message, isSystemMessage) {
+            const chatDiv = document.getElementById('message-display');
+            const newMessage = document.createElement('div');
+            newMessage.className = 'message';
+            newMessage.textContent = isSystemMessage ? `System: ${message}` : `User ${userId}: ${message}`;
+            chatDiv.appendChild(newMessage);
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+        }
+    
+        function acknowledgeMessage(messageId) {
+            if (messageId) {
+                fetch('/acknowledge_message', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ message_id: messageId })
+                })
+                .then(response => response.json())
+                .then(data => console.log('Acknowledgment status:', data.status))
+                .catch(error => console.error('Error in acknowledgeMessage:', error));
+            }
+        }
+    
+    </script>
+    
+    
+    <script>
+        function getUserPaths(userId) {
+            fetch('/get_user_paths/' + userId)
+                .then(response => response.json())
+                .then(paths => {
+                    displayUserPaths(paths, userId);
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                });
+        }
+    
+        function displayUserPaths(paths, userId, append = false) {
+            const pathsDiv = document.getElementById('paths-display');
+            if (!append) {
+                pathsDiv.innerHTML = '';
+            }
+            paths.forEach(path => {
+                const newPath = document.createElement('div');
+                newPath.id = `path-container-${path.id}`;
+                newPath.innerHTML = `<a href="${path.url}" target="_blank">${path.name}</a>
+                                    <p>(Description: ${path.description}, Exists: ${path.exists})</p>
+                                    <button onclick="removePath('${userId}', '${path.id}')">Remove</button>`;
+                pathsDiv.appendChild(newPath);
+            });
+        }
+    
+        function removePath(userId, pathId) {
+            fetch(`/remove_user_paths/${userId}/${pathId}`, { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const pathElement = document.getElementById(`path-container-${pathId}`);
+                        if (pathElement) {
+                            pathElement.remove();
+                        }
+                    } else {
+                        alert('Error removing path');
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+
+        function openTab(evt, tabName) {
+            var i, tabcontent, tablinks;
+            tabcontent = document.getElementsByClassName("tabcontent");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+            }
+            tablinks = document.getElementsByClassName("tablinks");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+            document.getElementById(tabName).style.display = "flex";
+            evt.currentTarget.className += " active";
+
+            if (tabName === 'MongoDB') {
+                loadMongoDBContent();
+            }
+        }
+    </script>
+</body>
+</html>
