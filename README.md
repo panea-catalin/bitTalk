@@ -1,8 +1,6 @@
 # ask-blockchain
 LLM Python based application that allows users to ask normal natural language questions to a bitcoin validator node and get valid answers.
 
-This project is brought by https://www.edoar.ai. Let's get you an edoar [do]!
-
 Ask blockchain takes advantage of the new open ai assistents, running throu api locally, using them to write code on the fly 
 in order to provide it's user with answers to blockchain alatitics mysteries. 
 
@@ -46,33 +44,4 @@ export MONGODB_URI=""
     if the code works the information will be passed to another agent that will setup the API end point.
     the answer returns to the first agent and relayed back to the user.
 
-
-!!! OPEN AI KEY REQUIRED !!! 
-
-    20 december first beta version
-    it's alive and talks back!
-    Since alpha
-    Ui implemented
-    MongoDb implemented
-    the system now designs webhooks as well
-    better error handleing
-    improved and expanded code
-    huge update!
-
-What to expect. for now...
-    5 dececmber 2023
-    first alpha version!
-
-    the main coder for blockchain is not yet active, we are in testing stages.
-    
-    The main agent will talk to you, 
-    01.    if you require of him the price of btc, it will call another agent that will make up a price and gives it back
-    02.    if you require of him to code for you, it will write py code save it in /sandbox/ and it will execute it
-
-    it is quite buggy yet, but works for the most part.
-
-    to be added:
-        better error handeling
-        blockchain coder assistant
-        code debugger
-
+   !!! OPEN AI KEY REQUIRED !!! 
